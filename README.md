@@ -21,7 +21,8 @@ This will generate a file (templates.go) with a map of template names to base-64
 
 #### Retrieve a template by name
 
-```import (
+```
+import (
 	"flag"
 	"log"
 
@@ -39,6 +40,7 @@ func main() {
 
 	template, err := templateManager.GetTemplate("main.tpl")
 	...
-}```
+}
+```
 
 The flag approach is only one way to activate dev-mode. Other ways are certainly possible. In dev-mode, the templateManager will load all template files any time any template is requested. This will ensure you always serve the latest version of all templates. If devMode is false, it will rely on its embedded, pre-parsed versions of the templates for maximum portability and performance.
