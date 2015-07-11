@@ -1,15 +1,21 @@
 package main
 
 import (
-	"fmt"
-	"github.com/captncraig/temple"
+	"flag"
 	"log"
+	
+	"github.com/captncraig/temple"
 )
 
+var devMode = flag.Bool("dev", false, "activate dev mode for templates")
+
 func main() {
-	templateManager, err := temple.New(false, myTemplates, "templates")
+	flag.Parse()
+	templateManager, err := temple.New(*devMode, myTemplates, "templates")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(templateManager.GetTemplate("a.tmpl"))
+
+	template, err := templateManager.GetTemplate("main.tpl")
+	...
 }
