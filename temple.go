@@ -1,6 +1,7 @@
 package temple
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"html/template"
@@ -9,6 +10,7 @@ import (
 
 type TemplateStore interface {
 	GetTemplate(name string) (*template.Template, error)
+	Execute(ctx interface{}, templates ...string) ([]byte, error)
 }
 
 func New(devMode bool, storedTemplates map[string]string, dir string) (TemplateStore, error) {
@@ -27,6 +29,10 @@ func (s *staticTemplateStore) GetTemplate(name string) (*template.Template, erro
 		return t, nil
 	}
 	return nil, fmt.Errorf("Template `%s` not found", name)
+}
+
+func (s *staticTemplateStore) Execute(ctx interface{}, templates ...string) ([]byte, error) {
+	return execute(s, ctx, templates...)
 }
 
 func newStatic(storedTemplates map[string]string) (*staticTemplateStore, error) {
@@ -73,4 +79,33 @@ func (d *devTemplateStore) GetTemplate(name string) (*template.Template, error) 
 		return t, nil
 	}
 	return nil, fmt.Errorf("Template `%s` not found", name)
+}
+
+func (d *devTemplateStore) Execute(ctx interface{}, templates ...string) ([]byte, error) {
+	return execute(d, ctx, templates...)
+}
+
+func execute(store TemplateStore, ctx interface{}, templates ...string) ([]byte, error) {
+	buf := &bytes.Buffer{}
+	var tpl *template.Template
+	for _, name := range templates {
+		var thisTpl *template.Template
+		if tpl == nil {
+			tpl, err := store.GetTemplate(name)
+			if err != nil {
+				return nil, err
+			}
+			thisTpl = tpl
+		} else {
+			thisTpl = tpl.Lookup(name)
+			if thisTpl == nil {
+				return nil, fmt.Errorf("Template `%s` not found", name)
+			}
+		}
+		err := thisTpl.Execute(buf, ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return buf.Bytes(), nil
 }
