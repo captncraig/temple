@@ -35,5 +35,29 @@ func main() {
 	if !*flagWatch {
 		return
 	}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Watching ", *flagDir)
+	err = watcher.Add(*flagDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for {
+		select {
+		case ev := <-watcher.Events:
+			if ev.Op != fsnotify.Chmod {
+				err := gen.Generate(params)
+				if err != nil {
+					log.Println("ERROR EMBEDDING TEMPLATES!", err)
+				} else {
+					log.Println("Successfully generated template file.")
+				}
+			}
+		case err = <-watcher.Errors:
+			log.Println(err)
+		}
+	}
 
 }
