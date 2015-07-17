@@ -5,12 +5,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html/template"
+	"io"
 	"path/filepath"
 )
 
 type TemplateStore interface {
 	GetTemplate(name string) (*template.Template, error)
-	Execute(ctx interface{}, templates ...string) ([]byte, error)
+	Execute(w io.Writer, ctx interface{}, templates ...string) error
 }
 
 func New(devMode bool, storedTemplates map[string]string, dir string) (TemplateStore, error) {
@@ -31,8 +32,8 @@ func (s *staticTemplateStore) GetTemplate(name string) (*template.Template, erro
 	return nil, fmt.Errorf("Template `%s` not found", name)
 }
 
-func (s *staticTemplateStore) Execute(ctx interface{}, templates ...string) ([]byte, error) {
-	return execute(s, ctx, templates...)
+func (s *staticTemplateStore) Execute(w io.Writer, ctx interface{}, templates ...string) error {
+	return execute(s, w, ctx, templates...)
 }
 
 func newStatic(storedTemplates map[string]string) (*staticTemplateStore, error) {
@@ -81,31 +82,68 @@ func (d *devTemplateStore) GetTemplate(name string) (*template.Template, error) 
 	return nil, fmt.Errorf("Template `%s` not found", name)
 }
 
-func (d *devTemplateStore) Execute(ctx interface{}, templates ...string) ([]byte, error) {
-	return execute(d, ctx, templates...)
+func (d *devTemplateStore) Execute(w io.Writer, ctx interface{}, templates ...string) error {
+	return execute(d, w, ctx, templates...)
 }
 
-func execute(store TemplateStore, ctx interface{}, templates ...string) ([]byte, error) {
-	buf := &bytes.Buffer{}
+const (
+	// number of buffers to keep in rotation
+	numBuffers = 100
+	// initial size to allocate for new buffers
+	initialSize = 1024 * 64 // 64KB
+	// size at which we don't put buffers back in pool
+	maxBufferSize = 1024 * 1024 // 1M
+)
+
+var buffers = make(chan *bytes.Buffer, numBuffers)
+
+func getBuffer() *bytes.Buffer {
+	var b *bytes.Buffer
+	select {
+	case b = <-buffers:
+		return b
+	default:
+	}
+	arr := make([]byte, initialSize)
+	b = bytes.NewBuffer(arr)
+	return b
+}
+
+func putBuffer(b *bytes.Buffer) {
+	b.Reset()
+	if cap(b.Bytes()) > maxBufferSize {
+		return
+	}
+	select {
+	case buffers <- b:
+		return
+	default:
+	}
+}
+
+func execute(store TemplateStore, w io.Writer, ctx interface{}, templates ...string) error {
+	buf := getBuffer()
+	defer putBuffer(buf)
 	var tpl *template.Template
 	for _, name := range templates {
 		var thisTpl *template.Template
 		if tpl == nil {
 			tpl, err := store.GetTemplate(name)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			thisTpl = tpl
 		} else {
 			thisTpl = tpl.Lookup(name)
 			if thisTpl == nil {
-				return nil, fmt.Errorf("Template `%s` not found", name)
+				return fmt.Errorf("Template `%s` not found", name)
 			}
 		}
 		err := thisTpl.Execute(buf, ctx)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return buf.Bytes(), nil
+	_, err := io.Copy(w, buf)
+	return err
 }
