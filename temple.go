@@ -11,7 +11,8 @@ import (
 
 type TemplateStore interface {
 	GetTemplate(name string) (*template.Template, error)
-	Execute(w io.Writer, ctx interface{}, templates ...string) error
+	Execute(w io.Writer, ctx interface{}, name string) error
+	ExecuteMaster(w io.Writer, ctx interface{}, master, child string) error
 }
 
 func New(devMode bool, storedTemplates map[string]string, dir string) (TemplateStore, error) {
@@ -32,10 +33,13 @@ func (s *staticTemplateStore) GetTemplate(name string) (*template.Template, erro
 	return nil, fmt.Errorf("Template `%s` not found", name)
 }
 
-func (s *staticTemplateStore) Execute(w io.Writer, ctx interface{}, templates ...string) error {
-	return execute(s, w, ctx, templates...)
+func (s *staticTemplateStore) Execute(w io.Writer, ctx interface{}, name string) error {
+	return execute(s, w, ctx, name)
 }
 
+func (s *staticTemplateStore) ExecuteMaster(w io.Writer, ctx interface{}, master, child string) error {
+	return executeMaster(s, w, ctx, master, child)
+}
 func newStatic(storedTemplates map[string]string) (*staticTemplateStore, error) {
 	t, err := mapToTemplate(storedTemplates)
 	if err != nil {
@@ -82,8 +86,12 @@ func (d *devTemplateStore) GetTemplate(name string) (*template.Template, error) 
 	return nil, fmt.Errorf("Template `%s` not found", name)
 }
 
-func (d *devTemplateStore) Execute(w io.Writer, ctx interface{}, templates ...string) error {
-	return execute(d, w, ctx, templates...)
+func (d *devTemplateStore) Execute(w io.Writer, ctx interface{}, name string) error {
+	return execute(d, w, ctx, name)
+}
+
+func (d *devTemplateStore) ExecuteMaster(w io.Writer, ctx interface{}, master, child string) error {
+	return executeMaster(d, w, ctx, master, child)
 }
 
 const (
@@ -121,29 +129,48 @@ func putBuffer(b *bytes.Buffer) {
 	}
 }
 
-func execute(store TemplateStore, w io.Writer, ctx interface{}, templates ...string) error {
+func execute(store TemplateStore, w io.Writer, ctx interface{}, name string) error {
+	tpl, err := store.GetTemplate(name)
+	if err != nil {
+		return err
+	}
 	buf := getBuffer()
 	defer putBuffer(buf)
-	var tpl *template.Template
-	for _, name := range templates {
-		var thisTpl *template.Template
-		if tpl == nil {
-			tpl, err := store.GetTemplate(name)
-			if err != nil {
-				return err
-			}
-			thisTpl = tpl
-		} else {
-			thisTpl = tpl.Lookup(name)
-			if thisTpl == nil {
-				return fmt.Errorf("Template `%s` not found", name)
-			}
-		}
-		err := thisTpl.Execute(buf, ctx)
-		if err != nil {
-			return err
-		}
+	err = tpl.Execute(buf, ctx)
+	if err != nil {
+		return err
 	}
-	_, err := io.Copy(w, buf)
+	_, err = io.Copy(w, buf)
+	return err
+}
+
+func executeMaster(store TemplateStore, w io.Writer, ctx interface{}, master, child string) error {
+	masterTpl, err := store.GetTemplate(master)
+	if err != nil {
+		return err
+	}
+	childTpl, err := store.GetTemplate(child)
+	if err != nil {
+		return err
+	}
+	// Render child template
+	childBuffer := getBuffer()
+	defer putBuffer(childBuffer)
+	err = childTpl.Execute(childBuffer, ctx)
+	if err != nil {
+		return err
+	}
+	masterBuffer := getBuffer()
+	defer putBuffer(masterBuffer)
+	// Wrap up original ctx and child content for master template
+	masterCtx := &struct {
+		Data    interface{}
+		Content string
+	}{ctx, childBuffer.String()}
+	err = masterTpl.Execute(w, masterCtx)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, masterBuffer)
 	return err
 }
