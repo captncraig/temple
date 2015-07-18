@@ -1,0 +1,11 @@
+{{template "header" .}}
+
+This is my content here!<br/>
+
+<ul>
+{{range .Items}}
+	<li>{{.}}
+{{end}}
+</ul>
+
+{{template "footer" .}}

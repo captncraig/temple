@@ -1,8 +1,6 @@
 <html>
 <head>
-
-
+<title>My website - {{.PageTitle}}</title>
 </head>
 <body>
-
-
+<h1>My website!!!</h1>

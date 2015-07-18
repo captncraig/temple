@@ -1,0 +1,1 @@
+Child template can do whatever it wants: {{.Foobar}}

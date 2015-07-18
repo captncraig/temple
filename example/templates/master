@@ -1,0 +1,16 @@
+<html>
+<head>
+
+
+</head>
+<body>
+The master defines this part.
+
+
+Master can include data from context by referencing `.Data.???` Like so: {{.Data.Xyz}} <br/>
+
+About to include child content with .Content:
+<hr/>
+{{.Content}}
+<hr/>
+Master part again.
