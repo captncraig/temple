@@ -50,3 +50,5 @@ func Endpoint(w http.ResponseWriter, r *http.Response){
 	err := templateManager.Execute(w, ctx, "myTemplate")
 }
 ```
+
+##### See example project for more detailed usage patterns, including master/child.
